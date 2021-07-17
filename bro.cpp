@@ -3,7 +3,13 @@
 #include<map>
 #include<string.h>
 #include<unistd.h>
+#ifdef _WIN32
 #include<windows.h>
+#endif
+#ifdef linux
+#include<arpa/inet.h>
+#include<sys/socket.h>
+#endif
 using namespace std;
 class Validator
 {
@@ -116,16 +122,20 @@ void listen(int portNumber,void (*callBack)(Error &))
 {
 int clientSocketDescriptor,serverSocketDescriptor;
 struct sockaddr_in serverSocketInformation,clientSocketInformation;
-char requestBuffer[4096];
+char requestBuffer[4097];
 int requestLength;
+#ifdef _WIN32
 WSAData wsaData;
 WORD ver;
 ver=MAKEWORD(1,1);
 WSAStartup(ver,&wsaData);//socket Library initialized
+#endif
 serverSocketDescriptor=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
 if(serverSocketDescriptor<0)
 {
+#ifdef _WIN32
 WSACleanup();
+#endif
 Error error("Unable to create a socket");
 callBack(error);
 return;
@@ -136,8 +146,13 @@ serverSocketInformation.sin_addr.s_addr=htonl(INADDR_ANY);
 int successCode=bind(serverSocketDescriptor,(struct sockaddr *)&serverSocketInformation,sizeof(serverSocketInformation));
 if(successCode<0)
 {
+#ifdef linux
+close(serverSocketDescriptor);
+#endif
+#ifdef _WIN32
 closesocket(serverSocketDescriptor);
 WSACleanup();
+#endif
 char x[101];
 sprintf(x,"Unable to bind to port number :%d\n",portNumber);
 Error error(x);
@@ -147,13 +162,23 @@ return;
 successCode=::listen(serverSocketDescriptor,10);
 if(successCode<0)
 {
+#ifdef linux
+close(serverSocketDescriptor);
+#endif
+#ifdef _WIN32
 closesocket(serverSocketDescriptor);
 WSACleanup();
+#endif
 Error error("Unable to accept client connection");
 callBack(error);
 return;
 }
+#ifdef _WIN32
 int len=sizeof(clientSocketInformation);
+#endif
+#ifdef linux
+socklen_t len=sizeof(clientSocketInformation);
+#endif
 while(1)
 {
 clientSocketDescriptor=accept(serverSocketDescriptor,(struct sockaddr *)&clientSocketInformation,&len);
@@ -161,20 +186,45 @@ if(clientSocketDescriptor<0)
 {
 //Not yet decided
 }
-requestLength=recv(clientSocketDescriptor,requestBuffer,sizeof(requestBuffer),0);
-if(requestLength>0)
+
+forward_list<string> requestBufferDS;
+forward_list<string>::iterator requestBufferDSIterator;
+requestBufferDSIterator=requestBufferDS.before_begin();
+int requestBufferDSSize=0;
+int requestDataCount=0;
+while(1)
 {
-const char *response=
-"HTTP/1.1 200 OK\r\n"
-"Connection:close\r\n"
-"Content-Type:text/html\r\n"
-"Content-Length:134\r\n\r\n"
-"<!DOCTYPE HTML><html lang='en'><head><title>Thinking Machines</title></head>"
-"<body><h1>Welcome to thinking machines</h1></body></html>";
-send(clientSocketDescriptor,response,strlen(response),0);
+requestLength=recv(clientSocketDescriptor,requestBuffer,sizeof(requestBuffer)-sizeof(char),0);
+if(requestLength==0)break;
+requestBufferDSIterator=requestBufferDS.insert_after(requestBufferDSIterator,string(requestBuffer));
+requestBufferDSSize++;
+requestDataCount+=requestLength;
 }
+char *requestData=new char[requestDataCount+1];
+char *p=requestData;
+const char *q;
+requestBufferDSIterator=requestBufferDS.begin();
+while(requestBufferDSIterator!=requestBufferDS.end())
+{
+q=(*requestBufferDSIterator).c_str();
+while(*q)
+{
+*p=*q;
+p++;
+q++;
+}
+++requestBufferDSIterator;
+}
+*p='\0';
+requestBufferDS.clear();
+
+printf("-------------request data begin --------------\n");
+printf("%s\n",requestData);
+printf("---------------request data ends -----------\n");
 }//infinite loop ends here
+#ifdef _WIN32
 WSACleanup();
+#endif
 }
 };
 int main()
