@@ -13,6 +13,65 @@
 #include<sys/socket.h>
 #endif
 using namespace std;
+class BroUtilities
+{
+private:
+BroUtilities(){}
+public:
+static void loadMIMETypes(map<string,string> &mimeTypes)
+{
+FILE *file=fopen("C:/bro/bro-data/mime.types","r");//open in r mode due to text file
+if(file==NULL)return;
+char *mimeType,*extension;
+char line[200];
+int x;
+while(true)
+{
+fgets(line,200,file);
+if(feof(file))break;
+if(line[0]=='#')continue;
+//logic to remove \r\n from the end of the string start here
+x=strlen(line)-1;
+while(true)
+{
+if(line[x]=='\r'||line[x]=='\n')
+{
+line[x]='\0';
+x--;
+}
+else 
+{
+break;
+}
+}
+//logic to remove \r\n from the end of the string end here
+mimeType= &line[0];
+for(x=0;line[x]!='\t';x++);
+line[x]='\0';
+x++;
+while(line[x]=='\t')x++;
+while(true)
+{
+extension= &line[x];
+while(line[x]!='\0'&&line[x]!=' ')x++;
+if(line[x]=='\0')
+{
+mimeTypes.insert(pair<string,string>(string(extension),string(mimeType)));
+cout<<extension<<"  ,  "<<mimeType<<endl;
+break;
+}
+else
+{
+line[x]='\0';
+mimeTypes.insert(pair<string,string>(string(extension),string(mimeType)));
+cout<<extension<<"  ,  "<<mimeType<<endl;
+x++;
+}
+}
+}//outer while loop ends
+fclose(file);
+}
+};
 class FileSystemUtility
 {
 private:
@@ -34,6 +93,14 @@ int x=stat(path,&s);
 if(x!=0)return false;
 if(s.st_mode&S_IFDIR)return true;
 return false;
+}
+static string getFileExtension(const char *path)
+{
+int x;
+x=strlen(path)-1;
+while(x>=0&&path[x]!='.')x--;
+if(x==-1||path[x]!='.')return string("");
+return string(path+(x+1));
 }
 };
 class StringUtility
@@ -200,9 +267,12 @@ class Bro
 private:
 string staticResourcesFolder;
 map<string,URLMapping>urlMapping;
+map<string,string>mimeTypes;
 public:
 Bro()
 {
+BroUtilities::loadMIMETypes(mimeTypes);
+if(mimeTypes.size()==0)throw string("bro-data folder has been tempered with");
 }
 ~Bro()
 {
@@ -236,8 +306,27 @@ fclose(file);
 return false;
 }
 rewind(file);//To move the internal file pointer to the start of the file
+string extension,mimeType;
+extension=FileSystemUtility::getFileExtension(resourcePath.c_str());
+if(extension.length()>0)
+{
+auto mimeTypesIterator=mimeTypes.find(extension);
+if(mimeTypesIterator!=mimeTypes.end())
+{
+mimeType=mimeTypesIterator->second;
+}
+else
+{
+mimeType=string("text/html");
+}
+}
+else
+{
+mimeType=string("text/html");
+}
+cout<<resourcePath<<","<<extension<<","<<mimeType<<endl;
 char header[200];
-sprintf(header,"HTTP/1.1 200 OK\r\nContent-Type:text/html\r\nContent-Length:%d\r\nConnection:close\r\n\r\n",fileSize);
+sprintf(header,"HTTP/1.1 200 OK\r\nContent-Type:%s\r\nContent-Length:%d\r\nConnection:close\r\n\r\n",mimeType,fileSize);
 send(clientSocketDescriptor,header,strlen(header),0);
 char buffer[4096];
 long bytesLeftToRead=fileSize;
@@ -258,6 +347,13 @@ void get(string url,void (*callBack)(Request &,Response &))
 if(Validator::isValidURLFormat(url))
 {
 urlMapping.insert(pair<string,URLMapping>(url,{__GET__,callBack}));
+}
+}
+void post(string url,void (*callBack)(Request &,Response &))
+{
+if(Validator::isValidURLFormat(url))
+{
+urlMapping.insert(pair<string,URLMapping>(url,{__POST__,callBack}));
 }
 }
 void listen(int portNumber,void (*callBack)(Error &))
@@ -457,40 +553,39 @@ int main()
 try
 {
 Bro bro;
-bro.setStaticResourcesFolder("c:/bro/revision/bro/whatever");
-bro.get("/",[](Request &request,Response &response) void{
+bro.setStaticResourcesFolder("c:/bro/whatever");
+bro.get("/save_text1_data",[](Request &request,Response &response) void{
 const char *html=R""""(
 <!DOCTYPE HTML>
 <html lang='en'>
 <head>
 <meta charset='utf-8'>
-<title>Whatever</title>
+<title>Bro test cases</title>
 <body>
-<h1>Welcome</h1>
-<h3>Administration</h3>
-<a href='getCustomers'>Customers List</a>
+<h1>Test case-1 GET with Query string</h1>
+<h3>Response form from server side</h3>
+<b> Data saved </b>
+<br/><br/>
+<a href='/index.html'>Home</a>
 </body>
 </html>
 )"""";
 response.setContentType("text/html");
 response<<html;
 });
-bro.get("/getCustomers",[](Request &request,Response &response)void{
+bro.get("/save_text2_data",[](Request &request,Response &response) void{
 const char *html=R""""(
 <!DOCTYPE HTML>
 <html lang='en'>
 <head>
 <meta charset='utf-8'>
-<title> Whatever</title>
-</head>
+<title>Bro test cases</title>
 <body>
-<h1> List of customer</h1>
-<ul>
-<li>Ramesh</li>
-<li>Suresh</li>
-<li>Mohan</li>
-</ul>
-<a href='/'>Home </a>
+<h1>Test case-2 POST with form data</h1>
+<h3>Response form from server side</h3>
+<b> Data saved </b>
+<br/><br/>
+<a href='/index.html'>Home</a>
 </body>
 </html>
 )"""";
