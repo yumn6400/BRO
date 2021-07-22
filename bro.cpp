@@ -1,4 +1,5 @@
 #include<iostream>
+#include<bits/stdc++.h>
 #include<forward_list>
 #include<map>
 #include<stdio.h>
@@ -190,13 +191,52 @@ return this->error;
 class Request
 {
 private:
+map<string,string>dataMap;
 char *method,*requestURI,*httpVersion;
 public:
-Request(char *method,char *requestURI,char *httpVersion)
+Request(char *method,char *requestURI,char *httpVersion,char *dataInRequest)
 {
 this->method=method;
 this->requestURI=requestURI;
 this->httpVersion=httpVersion;
+if(dataInRequest!=NULL&&strcmp(this->method,"get")==0)
+{
+createDataMap(dataInRequest,dataMap);
+}
+}
+void createDataMap(char *str,map<string,string> &dataMap)
+{
+char *ptr1,*ptr2;
+ptr1=str;
+ptr2=str;
+while(1)
+{
+while(*ptr2!='\0'&&*ptr2!='=')ptr2++;
+if(*ptr2=='\0')return;
+*ptr2='\0';
+string key=string(ptr1);
+ptr1=ptr2+1;
+ptr2=ptr1;
+while(*ptr2!='\0'&&*ptr2!='&')ptr2++;
+if(*ptr2=='\0')
+{
+dataMap.insert(pair<string,string>(key,string(ptr1)));
+break;
+}
+else
+{
+*ptr2='\0';
+dataMap.insert(pair<string,string>(key,string(ptr1)));
+ptr1=ptr2+1;
+ptr2=ptr1;
+}
+}
+}
+string operator[](string key)
+{
+auto iterator=dataMap.find(key);
+if(iterator==dataMap.end())return string("");
+return iterator->second;
 }
 friend class Bro;
 };
@@ -310,6 +350,7 @@ string extension,mimeType;
 extension=FileSystemUtility::getFileExtension(resourcePath.c_str());
 if(extension.length()>0)
 {
+transform(extension.begin(),extension.end(),extension.begin(),::tolower);
 auto mimeTypesIterator=mimeTypes.find(extension);
 if(mimeTypesIterator!=mimeTypes.end())
 {
@@ -433,7 +474,7 @@ close(clientSocketDescriptor);
 continue;
 }
 int i;
-char *method,*requestURI,*httpVersion;
+char *method,*requestURI,*httpVersion,*dataInRequest;
 requestBuffer[requestLength]='\0';
 //code to parse the first line of the http request starts here
 // GET \ HTTP 1.1\r\n
@@ -516,6 +557,15 @@ HttpErrorStatusUtility::sendHttpVersionNotSupportedError(clientSocketDescriptor,
 close(clientSocketDescriptor);
 continue;
 }
+dataInRequest=NULL;
+i=0;
+while(requestURI[i]!='\0'&&requestURI[i]!='?')i++;
+if(requestURI[i]=='?')
+{
+requestURI[i]='\0';
+dataInRequest=requestURI+i+1;
+}
+cout<<"Request arrived uri is: "<<requestURI<<endl;
 auto urlMappingsIterator=urlMapping.find(requestURI);
 if(urlMappingsIterator==urlMapping.end())
 {
@@ -535,7 +585,7 @@ continue;
 }
 //code to parse the header and then the payload if exist starts here
 //code to parset the header and then the payload if exist ends here
-Request request(method,requestURI,httpVersion);
+Request request(method,requestURI,httpVersion,dataInRequest);
 Response response;
 urlMapping.mappingFunction(request,response);
 HttpResponseUtility::sendResponse(clientSocketDescriptor,response);
@@ -553,8 +603,14 @@ int main()
 try
 {
 Bro bro;
-bro.setStaticResourcesFolder("c:/bro/whatever");
-bro.get("/save_text1_data",[](Request &request,Response &response) void{
+bro.setStaticResourcesFolder("c:/bro/revision/bro/whatever");
+bro.get("/save_test1_data",[](Request &request,Response &response) void{
+string nnn=request["nm"];
+string ccc=request["ct"];
+cout<<"Data arrived in request"<<endl;
+cout<<nnn<<endl;
+cout<<ccc<<endl;
+cout<<"--------------------"<<endl;
 const char *html=R""""(
 <!DOCTYPE HTML>
 <html lang='en'>
@@ -573,7 +629,7 @@ const char *html=R""""(
 response.setContentType("text/html");
 response<<html;
 });
-bro.get("/save_text2_data",[](Request &request,Response &response) void{
+bro.get("/save_test2_data",[](Request &request,Response &response) void{
 const char *html=R""""(
 <!DOCTYPE HTML>
 <html lang='en'>
