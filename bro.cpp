@@ -19,6 +19,51 @@ class BroUtilities
 private:
 BroUtilities(){}
 public:
+static bool isHexChar(int w)
+{
+if(w>=48&&w<=57)return true;
+if(w>='a'&&w<='f')return true;
+if(w>='A'&&w<='F')return true;
+return false;
+}
+static void decode(char *encodedString,char *decodedString)
+{
+char *ptr=encodedString;
+char *d=decodedString;
+int i,m;
+i=0;
+while(*ptr)
+{
+if(*ptr=='+')
+{
+d[i]=' ';
+i++;
+ptr++;
+continue;
+}
+if(*ptr!='%')
+{
+d[i]=*ptr;
+i++;
+ptr++;
+continue;
+}
+ptr++;
+if(isHexChar(*ptr)&&(isHexChar(*(ptr+1))))
+{
+sscanf(ptr,"%2x",&m);
+d[i]=m;
+i++;
+ptr+=2;
+}
+else
+{
+i=0;
+break;
+}
+}
+d[i]='\0';
+}
 static void loadMIMETypes(map<string,string> &mimeTypes)
 {
 FILE *file=fopen("C:/bro/bro-data/mime.types","r");//open in r mode due to text file
@@ -58,14 +103,12 @@ while(line[x]!='\0'&&line[x]!=' ')x++;
 if(line[x]=='\0')
 {
 mimeTypes.insert(pair<string,string>(string(extension),string(mimeType)));
-cout<<extension<<"  ,  "<<mimeType<<endl;
 break;
 }
 else
 {
 line[x]='\0';
 mimeTypes.insert(pair<string,string>(string(extension),string(mimeType)));
-cout<<extension<<"  ,  "<<mimeType<<endl;
 x++;
 }
 }
@@ -207,6 +250,8 @@ createDataMap(dataInRequest,dataMap);
 void createDataMap(char *str,map<string,string> &dataMap)
 {
 char *ptr1,*ptr2;
+int keyLength,valueLength;
+char *decoded;
 ptr1=str;
 ptr2=str;
 while(1)
@@ -214,19 +259,31 @@ while(1)
 while(*ptr2!='\0'&&*ptr2!='=')ptr2++;
 if(*ptr2=='\0')return;
 *ptr2='\0';
-string key=string(ptr1);
+keyLength=ptr2-ptr1;
+decoded=new char[keyLength+1];
+BroUtilities::decode(ptr1,decoded);
+string key=string(decoded);
+delete [] decoded;
 ptr1=ptr2+1;
 ptr2=ptr1;
 while(*ptr2!='\0'&&*ptr2!='&')ptr2++;
 if(*ptr2=='\0')
 {
-dataMap.insert(pair<string,string>(key,string(ptr1)));
+valueLength=ptr2-ptr1;
+decoded=new char[keyLength+1];
+BroUtilities::decode(ptr1,decoded);
+dataMap.insert(pair<string,string>(key,decoded));
+delete [] decoded;
 break;
 }
 else
 {
 *ptr2='\0';
-dataMap.insert(pair<string,string>(key,string(ptr1)));
+valueLength=ptr2-ptr1;
+decoded=new char[keyLength+1];
+BroUtilities::decode(ptr1,decoded);
+dataMap.insert(pair<string,string>(key,decoded));
+delete [] decoded;
 ptr1=ptr2+1;
 ptr2=ptr1;
 }
@@ -365,9 +422,8 @@ else
 {
 mimeType=string("text/html");
 }
-cout<<resourcePath<<","<<extension<<","<<mimeType<<endl;
 char header[200];
-sprintf(header,"HTTP/1.1 200 OK\r\nContent-Type:%s\r\nContent-Length:%d\r\nConnection:close\r\n\r\n",mimeType,fileSize);
+sprintf(header,"HTTP/1.1 200 OK\r\nContent-Type:%s\r\nContent-Length:%d\r\nConnection:close\r\n\r\n",mimeType.c_str(),fileSize);
 send(clientSocketDescriptor,header,strlen(header),0);
 char buffer[4096];
 long bytesLeftToRead=fileSize;
@@ -565,7 +621,6 @@ if(requestURI[i]=='?')
 requestURI[i]='\0';
 dataInRequest=requestURI+i+1;
 }
-cout<<"Request arrived uri is: "<<requestURI<<endl;
 auto urlMappingsIterator=urlMapping.find(requestURI);
 if(urlMappingsIterator==urlMapping.end())
 {
@@ -603,7 +658,7 @@ int main()
 try
 {
 Bro bro;
-bro.setStaticResourcesFolder("c:/bro/revision/bro/whatever");
+bro.setStaticResourcesFolder("c:/bro/whatever");
 bro.get("/save_test1_data",[](Request &request,Response &response) void{
 string nnn=request["nm"];
 string ccc=request["ct"];
@@ -629,7 +684,7 @@ const char *html=R""""(
 response.setContentType("text/html");
 response<<html;
 });
-bro.get("/save_test2_data",[](Request &request,Response &response) void{
+bro.post("/save_test2_data",[](Request &request,Response &response) void{
 const char *html=R""""(
 <!DOCTYPE HTML>
 <html lang='en'>
