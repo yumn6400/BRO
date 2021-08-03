@@ -1,0 +1,75 @@
+<!DOCTYPE HTML>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<title>Thinking Machines</title>
+<script>
+function validateForm(frm)
+{
+var rollNumber=frm.rollNumber.value.trim();
+if(rollNumber.length==0)
+{
+alert('Roll number required');
+frm.rollNumber.focus();
+return false;
+}
+rollNumber=parseInt(rollNumber);
+if(isNaN(rollNumber))
+{
+alert('Roll number should be of integer type');
+frm.rollNumber.value='';
+frm.rollNumber.focus();
+return false;
+}
+if(rollNumber<=0)
+{
+alert('Roll number should be greater than zero');
+frm.rollNumber.value='';
+frm.rollNumber.focus();
+return false;
+}
+var name=frm.name.value.trim();
+if(name.length==0)
+{
+alert('Name required');
+frm.name.focus();
+return false;
+}
+var v='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .';
+var i=0;
+while(i<name.length)
+{
+if(v.indexOf(name.charAt(i))==-1)
+{
+alert('Invalid characters in name');
+frm.name.focus();
+return false;
+}
+i++;
+}
+return true;
+}
+</script>
+</head>
+<body>
+<h1>Student (Add module)</h1>
+<form action='addStudent' onsubmit='return validateForm(this)'>
+RollNumber
+<input type='text' id='rollNumber' name='rollNumber'>
+<br/>
+Name 
+<input type='text' id='name' name='name' maxlength='20'>
+<br/>
+Gender &nbsp;&nbsp;&nbsp;
+Male
+<input type='radio' id='male' name='gender' value='M' checked>
+Female
+<input type='radio' id='female' name='gender' value='F'>
+<br/>
+<br/>
+<button type='submit'>Add</button>
+</form>
+<br/><br/>
+<a href='/'>Home</a>
+</body>
+</html>
