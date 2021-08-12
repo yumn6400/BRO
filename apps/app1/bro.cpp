@@ -646,8 +646,6 @@ urlMapping.mappingFunction(request,response);
 HttpResponseUtility::sendResponse(clientSocketDescriptor,response);
 closesocket(clientSocketDescriptor);
 }//infinite loop ends here    
-
-
 #ifdef _WIN32
 WSACleanup();
 #endif
