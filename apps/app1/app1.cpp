@@ -18,6 +18,23 @@ response<<R""""(
 <head>
 <meta charset='utf-8'>
 <title>Thinking Machines</title>
+<script>
+function confirmStudentDeletion(rollNumber,name)
+{
+var x=confirm("Delete "+name+" ?");
+if(x)
+{
+var dsf=document.getElementById("deleteStudentForm");
+var rn=document.getElementById("rollNumber");
+rn.value=rollNumber;
+dsf.submit();
+}
+else
+{
+alert(name+" Not deleted");
+}
+}
+</script>
 </head>
 <body>
 <h1>List of Student</h1>
@@ -55,7 +72,7 @@ else
 response<<"<td><img src='Female.png'></td>";
 }
 response<<"<td><a href='/editStudent?rollNumber="<<str<<"'>Edit</a></td>";
-response<<"<td><a href='/confirmStudentDeletion?rollNumber="<<str<<"'>Delete</a></td>";
+response<<"<td><a href='javascript:confirmStudentDeletion("<<str<<",\""<<stud.name<<"\")'>Delete</a></td>";
 response<<"</tr>";
 }
 fclose(file);
@@ -69,10 +86,16 @@ response<<R""""(
 </table>
 <br/>
 <a href='StudentAddForm.html'>Add Student</a>
+<form action='deleteStudent' id='deleteStudentForm'>
+<input type='hidden' id='rollNumber' name='rollNumber'>
+</form>
 </body>
 </html>
 )"""";
 });
+
+
+
 bro.get("/addStudent",[](Request &request,Response &response)void{
 string rollNumber=request["rollNumber"];
 string name=request["name"];
@@ -161,7 +184,6 @@ response<<line;
 response<<R""""(
 <form action='addStudent' onsubmit='return validateForm(this)'>
 RollNumber
-
 )"""";
 sprintf(line,"<input type='text' id='rollNumber' name='rollNumber' value='%d'>",vRollNumber);
 response<<line;
