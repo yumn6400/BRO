@@ -14,6 +14,94 @@
 #include<sys/socket.h>
 #endif
 using namespace std;
+//Amit (The Bro Programmer)
+enum __container_operation_failure_reason__{__KEY_EXISTS__,__KEY_DOES_NOT_EXIST__,__OUT_OF_MEMORY__,__VALUE_SIZE_MISMATCH__};
+class Container
+{
+private:
+typedef struct _bag
+{
+void *ptr;
+int size;
+}Bag;
+map<string,Bag> dataSet;
+public:
+template<class T>
+void set(string keyName,T value,bool *success,__container_operation_failure_reason__ *reason)
+{
+auto iterator=dataSet.find(keyName);
+if(iterator!=dataSet.end())
+{
+if(reason)*reason={__KEY_EXISTS__};
+if(success) *success=false;
+return;
+}
+void *ptr;
+ptr=malloc(sizeof(T));
+if(ptr==NULL)
+{
+if(reason) *reason={__OUT_OF_MEMORY__};
+if(success) *success=false;
+return;
+}
+memcpy(ptr,&value,sizeof(T));
+dataSet.insert(pair<string,Bag>(keyName,{ptr,sizeof(T)}));
+}
+template<class T>
+void get(string keyName,T value,bool *success,__container_operation_failure_reason__ *reason)
+{
+auto dataSetIterator=dataSet.find(keyName);
+if(dataSetIterator==dataSet.end())
+{
+if(reason) *reason={__KEY_DOES_NOT_EXIST__};
+if(success)*success=false;
+return;
+}
+Bag bag;
+bag=dataSetIterator->second;
+if(bag.size!=sizeof(*value))
+{
+if(reason) *reason={__VALUE_SIZE_MISMATCH__};
+if(success)*success=false;
+return;
+}
+memcpy(value,bag.ptr,sizeof(*value));
+if(success)*success=true;
+}
+template<class T>
+void remove(string keyName,T value,bool *success,__container_operation_failure_reason__ *reason)
+{
+auto dataSetIterator=dataSet.find(keyName);
+if(dataSetIterator==dataSet.end())
+{
+if(reason) *reason={__KEY_DOES_NOT_EXIST__};
+if(success)*success=false;
+return;
+}
+Bag bag;
+bag=dataSetIterator->second;
+if(bag.size!=sizeof(*value))
+{
+if(reason) *reason={__VALUE_SIZE_MISMATCH__};
+if(success)*success=false;
+return;
+}
+memcpy(value,bag.ptr,sizeof(*value));
+free(bag.ptr);//To release memory allocated by the Bro server programmer
+if(success)*success=true;
+}
+bool contains(string keyName)
+{
+auto iterator=this->dataSet.find(keyName);
+return iterator!=this->dataSet.end();
+}
+};
+
+class ApplicationLevelContainer :public Container
+{
+
+};
+
 class BroUtilities
 {
 private:
@@ -66,7 +154,7 @@ d[i]='\0';
 }
 static void loadMIMETypes(map<string,string> &mimeTypes)
 {
-FILE *file=fopen("C:/bro/bro-data/mime.types","r");//open in r mode due to text file
+FILE *file=fopen("C:/bro/gitHub/bro/apps/app1/bro-data/mime.types","r");//open in r mode due to text file
 if(file==NULL)return;
 char *mimeType,*extension;
 char line[200];
@@ -354,17 +442,39 @@ send(clientSocketDescriptor,str.c_str(),str.length(),0);
 
 
 enum __request_method__{__GET__,__POST__,__PUT__,__DELETE__,__HEAD__,__OPTIONS__,__CONNECT__,__TRACE__};
+class Function
+{
+public:
+virtual void doService(Request &,Response &)=0;
+};
 typedef struct __url__mapping
 {
 __request_method__ requestMethod;
-void(*mappingFunction)(Request &,Response &);
+//void(*mappingFunction)(Request &,Response &);
+Function *function;
 }URLMapping;
+
+class SimpleFunction:public Function
+{
+private:
+void(*mappingFunction)(Request &,Response &);
+public:
+SimpleFunction(void(*mappingFunction)(Request &,Response &))
+{
+this->mappingFunction=mappingFunction;
+}
+void doService(Request &request,Response &response)
+{
+this->mappingFunction(request,response);
+}
+};
 class Bro
 {
 private:
 string staticResourcesFolder;
 map<string,URLMapping>urlMapping;
 map<string,string>mimeTypes;
+ApplicationLevelContainer applicationLevelContainer;
 public:
 Bro()
 {
@@ -443,14 +553,18 @@ void get(string url,void (*callBack)(Request &,Response &))
 {
 if(Validator::isValidURLFormat(url))
 {
-urlMapping.insert(pair<string,URLMapping>(url,{__GET__,callBack}));
+Function *function;
+function=new SimpleFunction(callBack);
+urlMapping.insert(pair<string,URLMapping>(url,{__GET__,function}));
 }
 }
 void post(string url,void (*callBack)(Request &,Response &))
 {
 if(Validator::isValidURLFormat(url))
 {
-urlMapping.insert(pair<string,URLMapping>(url,{__POST__,callBack}));
+Function *function;
+function=new SimpleFunction(callBack);
+urlMapping.insert(pair<string,URLMapping>(url,{__POST__,function}));
 }
 }
 void listen(int portNumber,void (*callBack)(Error &))
@@ -642,7 +756,8 @@ continue;
 //code to parset the header and then the payload if exist ends here
 Request request(method,requestURI,httpVersion,dataInRequest);
 Response response;
-urlMapping.mappingFunction(request,response);
+//urlMapping.mappingFunction(request,response);
+urlMapping.function->doService(request,response);
 HttpResponseUtility::sendResponse(clientSocketDescriptor,response);
 closesocket(clientSocketDescriptor);
 }//infinite loop ends here    

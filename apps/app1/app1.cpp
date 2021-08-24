@@ -10,7 +10,7 @@ char gender;
 try
 {
 Bro bro;
-bro.setStaticResourcesFolder("C:/bro/apps/app1/static");
+bro.setStaticResourcesFolder("c:/bro/gitHub/bro/apps/app1/static");
 bro.get("/",[](Request &request,Response &response){
 response<<R""""(
 <!DOCTYPE HTML>
