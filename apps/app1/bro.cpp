@@ -154,7 +154,7 @@ d[i]='\0';
 }
 static void loadMIMETypes(map<string,string> &mimeTypes)
 {
-FILE *file=fopen("C:/bro/gitHub/bro/apps/app1/bro-data/mime.types","r");//open in r mode due to text file
+FILE *file=fopen("C:/bro/apps/app1/bro-data/mime.types","r");//open in r mode due to text file
 if(file==NULL)return;
 char *mimeType,*extension;
 char line[200];
@@ -468,6 +468,22 @@ void doService(Request &request,Response &response)
 this->mappingFunction(request,response);
 }
 };
+class ApplicationLevelContainerDependentFunction:public Function
+{
+private:
+void(*mappingFunction)(Request &,Response &,ApplicationLevelContainer &);
+ApplicationLevelContainer *p2ApplicationLevelContainer;
+public:
+ApplicationLevelContainerDependentFunction(void(*mappingFunction)(Request &,Response &,ApplicationLevelContainer &),ApplicationLevelContainer *p2ApplicationLevelContainer)
+{
+this->mappingFunction=mappingFunction;
+this->p2ApplicationLevelContainer=p2ApplicationLevelContainer;
+}
+void doService(Request &request,Response &response)
+{
+this->mappingFunction(request,response,*p2ApplicationLevelContainer);
+}
+};
 class Bro
 {
 private:
@@ -555,6 +571,15 @@ if(Validator::isValidURLFormat(url))
 {
 Function *function;
 function=new SimpleFunction(callBack);
+urlMapping.insert(pair<string,URLMapping>(url,{__GET__,function}));
+}
+}
+void get(string url,void (*callBack)(Request &,Response &,ApplicationLevelContainer &))
+{
+if(Validator::isValidURLFormat(url))
+{
+Function *function;
+function=new ApplicationLevelContainerDependentFunction(callBack,&(this->applicationLevelContainer));
 urlMapping.insert(pair<string,URLMapping>(url,{__GET__,function}));
 }
 }
@@ -766,3 +791,87 @@ WSACleanup();
 #endif
 }
 };
+int main()
+{
+try
+{
+Bro bro;
+bro.setStaticResourcesFolder("c:/bro/whatever");
+bro.get("/",[](Request &request,Response &response) void{
+const char *html=R""""(
+<!DOCTYPE HTML>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<title>Bro test cases</title>
+<body>
+<h1>Welcome</h1>
+<br/><br/>
+<a href='/firstCartoonFilm'>First Film</a><br/>
+<a href='/secondCartoonFilm'>Second Film</a>
+</body>
+</html>
+)"""";
+response.setContentType("text/html");
+response<<html;
+});
+bro.get("/firstCartoonFilm",[](Request &request,Response &response,ApplicationLevelContainer &cc) void{
+string *str;
+str=new string("The Jungle Book");
+cc.set("firstFilm",str,NULL,NULL);
+const char *html=R""""(
+<!DOCTYPE HTML>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<title>Bro test cases</title>
+<body>
+<h1>First cartoon Film</h1>
+<h3>The Jungle Book</h3>
+<br/><br/>
+<a href='/secondCartoonFilm'>Watch the next Film</a>
+</body>
+</html>
+)"""";
+response.setContentType("text/html");
+response<<html;
+});
+bro.get("/secondCartoonFilm",[](Request &request,Response &response,ApplicationLevelContainer &cc) void{
+string *s;
+cc.get("firstFilm",&s,NULL,NULL);
+response.setContentType("text/html");
+const char *html1=R""""(
+<!DOCTYPE HTML>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<title>Bro test cases</title>
+<body>
+<h1>First cartoon Film was :
+)"""";
+response<<html1;
+response<<*s;
+const char *html2=R""""(
+</h1>
+<h3>Second cartoon Film</h3>
+<h3>Mulan</h3>
+<br/><br/>
+</body>
+</html>
+)"""";
+response<<html2;
+});
+bro.listen(6060,[](Error &error)void{
+if(error.hasError())
+{
+cout<<error.getError();
+return;
+}
+cout<<"Bro HTTP server is ready to accept request on port 6060"<<endl;
+});
+}catch(string exception)
+{
+cout<<exception<<endl;
+}
+return 0;
+}
