@@ -324,7 +324,21 @@ class Request
 private:
 map<string,string>dataMap;
 char *method,*requestURI,*httpVersion;
+string _forwardTo;
 public:
+void forwardTo(string _forwardTo)
+{
+this->_forwardTo=_forwardTo;
+}
+private:
+bool isToBeForwarded()
+{
+return this->_forwardTo.length()>0;
+}
+string forwardToWhichResource()
+{
+return this->_forwardTo;
+}
 Request(char *method,char *requestURI,char *httpVersion,char *dataInRequest)
 {
 this->method=method;
@@ -488,7 +502,7 @@ class Bro
 {
 private:
 string staticResourcesFolder;
-map<string,URLMapping>urlMapping;
+map<string,URLMapping>urlMappings;
 map<string,string>mimeTypes;
 ApplicationLevelContainer applicationLevelContainer;
 public:
@@ -571,7 +585,7 @@ if(Validator::isValidURLFormat(url))
 {
 Function *function;
 function=new SimpleFunction(callBack);
-urlMapping.insert(pair<string,URLMapping>(url,{__GET__,function}));
+urlMappings.insert(pair<string,URLMapping>(url,{__GET__,function}));
 }
 }
 void get(string url,void (*callBack)(Request &,Response &,ApplicationLevelContainer &))
@@ -580,7 +594,7 @@ if(Validator::isValidURLFormat(url))
 {
 Function *function;
 function=new ApplicationLevelContainerDependentFunction(callBack,&(this->applicationLevelContainer));
-urlMapping.insert(pair<string,URLMapping>(url,{__GET__,function}));
+urlMappings.insert(pair<string,URLMapping>(url,{__GET__,function}));
 }
 }
 void post(string url,void (*callBack)(Request &,Response &))
@@ -589,7 +603,7 @@ if(Validator::isValidURLFormat(url))
 {
 Function *function;
 function=new SimpleFunction(callBack);
-urlMapping.insert(pair<string,URLMapping>(url,{__POST__,function}));
+urlMappings.insert(pair<string,URLMapping>(url,{__POST__,function}));
 }
 }
 void listen(int portNumber,void (*callBack)(Error &))
@@ -760,8 +774,8 @@ if(requestURI[i]=='?')
 requestURI[i]='\0';
 dataInRequest=requestURI+i+1;
 }
-auto urlMappingsIterator=urlMapping.find(requestURI);
-if(urlMappingsIterator==urlMapping.end())
+auto urlMappingsIterator=urlMappings.find(requestURI);
+if(urlMappingsIterator==urlMappings.end())
 {
 if(!serverStaticResource(clientSocketDescriptor,requestURI))
 {
@@ -780,10 +794,33 @@ continue;
 //code to parse the header and then the payload if exist starts here
 //code to parset the header and then the payload if exist ends here
 Request request(method,requestURI,httpVersion,dataInRequest);
+while(true)
+{
 Response response;
-//urlMapping.mappingFunction(request,response);
 urlMapping.function->doService(request,response);
+if(!request.isToBeForwarded())
+{
 HttpResponseUtility::sendResponse(clientSocketDescriptor,response);
+break;
+}
+string forwardTo=request.forwardToWhichResource();
+urlMappingsIterator=urlMappings.find(forwardTo);
+if(urlMappingsIterator==urlMappings.end())
+{
+if(!serverStaticResource(clientSocketDescriptor,forwardTo.c_str()))
+{
+HttpErrorStatusUtility::sendNotFoundError(clientSocketDescriptor,requestURI);
+}
+break;
+}
+urlMapping=urlMappingsIterator->second;
+if(urlMapping.requestMethod==__GET__&&strcmp(method,"get")!=0)
+{
+HttpErrorStatusUtility::sendMethodNotAllowedError(clientSocketDescriptor,method,requestURI);
+break;
+}
+request.forwardTo(string(""));
+}//loop ends
 closesocket(clientSocketDescriptor);
 }//infinite loop ends here    
 #ifdef _WIN32
@@ -807,18 +844,22 @@ const char *html=R""""(
 <body>
 <h1>Welcome</h1>
 <br/><br/>
-<a href='/firstCartoonFilm'>First Film</a><br/>
-<a href='/secondCartoonFilm'>Second Film</a>
+<a href='/coolBro1'>First Film</a><br/>
 </body>
 </html>
 )"""";
 response.setContentType("text/html");
 response<<html;
 });
-bro.get("/firstCartoonFilm",[](Request &request,Response &response,ApplicationLevelContainer &cc) void{
-string *str;
-str=new string("The Jungle Book");
-cc.set("firstFilm",str,NULL,NULL);
+bro.get("/coolBro1",[](Request &request,Response &response) void{
+cout<<"/coolBro1 function got called"<<endl;
+request.forwardTo(string("/coolBro2"));
+});
+bro.get("/coolBro2",[](Request &request,Response &response) void{
+cout<<"/coolBro2 function got called"<<endl;
+request.forwardTo(string("/coolBro3"));
+});
+bro.get("/coolBro3",[](Request &request,Response &response) void{
 const char *html=R""""(
 <!DOCTYPE HTML>
 <html lang='en'>
@@ -826,40 +867,14 @@ const char *html=R""""(
 <meta charset='utf-8'>
 <title>Bro test cases</title>
 <body>
-<h1>First cartoon Film</h1>
-<h3>The Jungle Book</h3>
+<h1>Welcome</h1>
 <br/><br/>
-<a href='/secondCartoonFilm'>Watch the next Film</a>
+<h1> CoolBro3 function got called</h1>
 </body>
 </html>
 )"""";
 response.setContentType("text/html");
 response<<html;
-});
-bro.get("/secondCartoonFilm",[](Request &request,Response &response,ApplicationLevelContainer &cc) void{
-string *s;
-cc.get("firstFilm",&s,NULL,NULL);
-response.setContentType("text/html");
-const char *html1=R""""(
-<!DOCTYPE HTML>
-<html lang='en'>
-<head>
-<meta charset='utf-8'>
-<title>Bro test cases</title>
-<body>
-<h1>First cartoon Film was :
-)"""";
-response<<html1;
-response<<*s;
-const char *html2=R""""(
-</h1>
-<h3>Second cartoon Film</h3>
-<h3>Mulan</h3>
-<br/><br/>
-</body>
-</html>
-)"""";
-response<<html2;
 });
 bro.listen(6060,[](Error &error)void{
 if(error.hasError())
