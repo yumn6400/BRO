@@ -15,6 +15,11 @@
 #endif
 using namespace std;
 //Amit (The Bro Programmer)
+#define _forward_(request,url) \
+request.forwardTo(url); \
+return;
+
+
 enum __container_operation_failure_reason__{__KEY_EXISTS__,__KEY_DOES_NOT_EXIST__,__OUT_OF_MEMORY__,__VALUE_SIZE_MISMATCH__};
 class Container
 {
@@ -853,11 +858,12 @@ response<<html;
 });
 bro.get("/coolBro1",[](Request &request,Response &response) void{
 cout<<"/coolBro1 function got called"<<endl;
-request.forwardTo(string("/coolBro2"));
+_forward_(request,string("/coolBro2"));
+cout<<"Code after forwarding function"<<endl;
 });
 bro.get("/coolBro2",[](Request &request,Response &response) void{
 cout<<"/coolBro2 function got called"<<endl;
-request.forwardTo(string("/coolBro3"));
+_forward_(request,string("/coolBro3"));
 });
 bro.get("/coolBro3",[](Request &request,Response &response) void{
 const char *html=R""""(
@@ -875,6 +881,7 @@ const char *html=R""""(
 )"""";
 response.setContentType("text/html");
 response<<html;
+cout<<"/coolBro3 function got called"<<endl;
 });
 bro.listen(6060,[](Error &error)void{
 if(error.hasError())
