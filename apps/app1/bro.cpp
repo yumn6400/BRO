@@ -3,6 +3,8 @@
 #include<forward_list>
 #include<map>
 #include<stdio.h>
+#include<queue>
+#include<vector>
 #include<sys/stat.h>
 #include<string.h>
 #include<unistd.h>
@@ -461,19 +463,26 @@ send(clientSocketDescriptor,str.c_str(),str.length(),0);
 
 
 enum __request_method__{__GET__,__POST__,__PUT__,__DELETE__,__HEAD__,__OPTIONS__,__CONNECT__,__TRACE__};
-class Function
+class ServiceFunction
 {
 public:
 virtual void doService(Request &,Response &)=0;
 };
+
+class StartupFunction
+{
+public:
+virtual int getPriorityNumber()=0;
+virtual void run()=0;
+};
+
 typedef struct __url__mapping
 {
 __request_method__ requestMethod;
-//void(*mappingFunction)(Request &,Response &);
-Function *function;
+ServiceFunction *ServiceFunction;
 }URLMapping;
 
-class SimpleFunction:public Function
+class SimpleFunction:public ServiceFunction
 {
 private:
 void(*mappingFunction)(Request &,Response &);
@@ -487,7 +496,7 @@ void doService(Request &request,Response &response)
 this->mappingFunction(request,response);
 }
 };
-class ApplicationLevelContainerDependentFunction:public Function
+class ApplicationLevelContainerDependentFunction:public ServiceFunction
 {
 private:
 void(*mappingFunction)(Request &,Response &,ApplicationLevelContainer &);
@@ -503,12 +512,65 @@ void doService(Request &request,Response &response)
 this->mappingFunction(request,response,*p2ApplicationLevelContainer);
 }
 };
+class SimpleStartupFunction:public StartupFunction
+{
+private:
+int priorityNumber;
+void(*startupFunction)(void);
+public:
+SimpleStartupFunction(int priorityNumber,void(*startupFunction)(void))
+{
+this->priorityNumber=priorityNumber;
+this->startupFunction=startupFunction;
+}
+int getPriorityNumber()
+{
+return this->priorityNumber;
+}
+void run()
+{
+startupFunction();
+}
+};
+class ApplicationLevelContainerDependentStartupFunction:public StartupFunction
+{
+private:
+int priorityNumber;
+void(*startupFunction)(ApplicationLevelContainer &);
+ApplicationLevelContainer *p2ApplicationLevelContainer;
+public:
+ApplicationLevelContainerDependentStartupFunction(int priorityNumber,void(*startupFunction)(ApplicationLevelContainer &),ApplicationLevelContainer *applicationLevelContainer)
+{
+this->priorityNumber=priorityNumber;
+this->startupFunction=startupFunction;
+this->p2ApplicationLevelContainer=p2ApplicationLevelContainer;
+}
+int getPriorityNumber()
+{
+return this->priorityNumber;
+}
+void run()
+{
+startupFunction(*p2ApplicationLevelContainer);
+}
+};
+class StartupFunctionComparator
+{
+public:
+int operator()(StartupFunction *e,StartupFunction *f)
+{
+return !(e->getPriorityNumber()<f->getPriorityNumber());
+}
+};
+
+
 class Bro
 {
 private:
 string staticResourcesFolder;
 map<string,URLMapping>urlMappings;
 map<string,string>mimeTypes;
+priority_queue<StartupFunction *,vector<StartupFunction *>,StartupFunctionComparator> startupFunctions;
 ApplicationLevelContainer applicationLevelContainer;
 public:
 Bro()
@@ -584,31 +646,45 @@ bytesLeftToRead=bytesLeftToRead-bytesToRead;
 fclose(file);
 return true;
 }
+void addStartupService(int priorityNumber,void(*startupFunction)(void))
+{
+StartupFunction *sf;
+sf=new SimpleStartupFunction(priorityNumber,startupFunction);
+this->startupFunctions.push(sf);
+}
+void addStartupService(int priorityNumber,void(*startupFunction)(ApplicationLevelContainer &))
+{
+StartupFunction *sf;
+sf=new ApplicationLevelContainerDependentStartupFunction(priorityNumber,startupFunction,&(applicationLevelContainer));
+this->startupFunctions.push(sf);
+}
+
+
 void get(string url,void (*callBack)(Request &,Response &))
 {
 if(Validator::isValidURLFormat(url))
 {
-Function *function;
-function=new SimpleFunction(callBack);
-urlMappings.insert(pair<string,URLMapping>(url,{__GET__,function}));
+ServiceFunction *serviceFunction;
+serviceFunction=new SimpleFunction(callBack);
+urlMappings.insert(pair<string,URLMapping>(url,{__GET__,serviceFunction}));
 }
 }
 void get(string url,void (*callBack)(Request &,Response &,ApplicationLevelContainer &))
 {
 if(Validator::isValidURLFormat(url))
 {
-Function *function;
-function=new ApplicationLevelContainerDependentFunction(callBack,&(this->applicationLevelContainer));
-urlMappings.insert(pair<string,URLMapping>(url,{__GET__,function}));
+ServiceFunction *serviceFunction;
+serviceFunction=new ApplicationLevelContainerDependentFunction(callBack,&(this->applicationLevelContainer));
+urlMappings.insert(pair<string,URLMapping>(url,{__GET__,serviceFunction}));
 }
 }
 void post(string url,void (*callBack)(Request &,Response &))
 {
 if(Validator::isValidURLFormat(url))
 {
-Function *function;
-function=new SimpleFunction(callBack);
-urlMappings.insert(pair<string,URLMapping>(url,{__POST__,function}));
+ServiceFunction *serviceFunction;
+serviceFunction=new SimpleFunction(callBack);
+urlMappings.insert(pair<string,URLMapping>(url,{__POST__,serviceFunction}));
 }
 }
 void listen(int portNumber,void (*callBack)(Error &))
@@ -666,6 +742,15 @@ Error error("Unable to accept client connection");
 callBack(error);
 return;
 }
+StartupFunction *startupFunction;
+while(!startupFunctions.empty())
+{
+startupFunction=startupFunctions.top();
+startupFunctions.pop();
+startupFunction->run();
+}
+
+
 Error error("");
 callBack(error);
 #ifdef _WIN32
@@ -802,7 +887,7 @@ Request request(method,requestURI,httpVersion,dataInRequest);
 while(true)
 {
 Response response;
-urlMapping.function->doService(request,response);
+urlMapping.ServiceFunction->doService(request,response);
 if(!request.isToBeForwarded())
 {
 HttpResponseUtility::sendResponse(clientSocketDescriptor,response);
@@ -839,6 +924,24 @@ try
 {
 Bro bro;
 bro.setStaticResourcesFolder("c:/bro/whatever");
+bro.addStartupService(3,[](){
+cout<<"-------------------------------------------------"<<endl;
+cout<<"Some cool function that get called on startup"<<endl;
+cout<<"The priority number setup for this function is 3"<<endl;
+cout<<"-------------------------------------------------"<<endl;
+});
+bro.addStartupService(1,[](){
+cout<<"-------------------------------------------------"<<endl;
+cout<<"Some cool function that get called on startup"<<endl;
+cout<<"The priority number setup for this function is 1"<<endl;
+cout<<"-------------------------------------------------"<<endl;
+});
+bro.addStartupService(2,[](ApplicationLevelContainer &applicationLevelContainer){
+cout<<"-------------------------------------------------"<<endl;
+cout<<"Some cool function that get called on startup"<<endl;
+cout<<"The priority number setup for this function is 2"<<endl;
+cout<<"-------------------------------------------------"<<endl;
+});
 bro.get("/",[](Request &request,Response &response) void{
 const char *html=R""""(
 <!DOCTYPE HTML>
