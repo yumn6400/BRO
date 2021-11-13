@@ -345,7 +345,22 @@ map<string,string>dataMap;
 char *method,*httpVersion;
 const char *requestURI;
 string _forwardTo;
+map<string,string>varMap;
 public:
+void set(string name,string value)
+{
+varMap.insert({name,value}); //varMap.insert(pair<string,string>(name,value));
+}
+bool contains(string name)
+{
+return varMap.find(name)!=varMap.end();
+}
+string get(string name)
+{
+auto i=varMap.find(name);
+if(i==varMap.end())return string("");
+else return i->second;
+}
 void forwardTo(string _forwardTo)
 {
 this->_forwardTo=_forwardTo;
@@ -617,7 +632,7 @@ FILE *f;
 int toRead;
 char buffer[513];
 long fileLength;
-f=fopen(chtmlFileName,"r");
+f=fopen(chtmlFileName,"rb");
 if(f==NULL)
 {
 //code to send back 404 error
@@ -689,9 +704,6 @@ cout<<"1-->"<<sp<<","<<ep<<endl;
 vmd_record.start_position=sp;
 vmd_record.end_position=ep;
 fwrite(&vmd_record,sizeof(struct vmd),1,vmdFile);
-
-
-
 //write vmd record to the file ends here
 start=end+1;
 
@@ -727,10 +739,6 @@ fwrite(&vmd_record,sizeof(struct vmd),1,vmdFile);
 strcpy(buffer,buffer+256);
 end=end-256;
 start=end+1;
-
-
-
-
 }//while(1) ends
 //processing the contents of the buffer ends here
 if(x==fileLength)break;
@@ -747,9 +755,12 @@ if(!FileSystemUtility::directoryExists("vmd_files"))
 if(!FileSystemUtility::createDirectory("vmd_files"))
 {
 //we will implement this part later on
+//the code to calculate response size starts here
+
+
+//the code to calculate response size ends here
 }
 }
-//done done
 char vmdFileName[257];
 createVMDFileName(chtmlFileName,vmdFileName);
 string folderName=string("vmd_files");
@@ -771,6 +782,80 @@ if(generateVMDFile)
 createVMDFile(chtmlFileName,pathToVMDFile.c_str());
 }
 //process the chtml file (pick up info from vmd file)
+//code to calculate response size starts here
+FILE *chtmlFile=fopen(chtmlFileName,"rb");
+FILE *vmdFile=fopen(pathToVMDFile.c_str(),"rb");
+fseek(chtmlFile,0,SEEK_END);
+long fileLength=ftell(chtmlFile);
+rewind(chtmlFile);
+string data;
+long responseSize=fileLength;
+struct vmd vmdRecord;
+while(1)
+{
+fread(&vmdRecord,sizeof(struct vmd),1,vmdFile);
+if(feof(vmdFile))break;
+responseSize=(responseSize-(vmdRecord.end_position-vmdRecord.start_position)+1);
+data=request.get(vmdRecord.var_name);
+responseSize=responseSize+data.length();
+}
+//code to calculate response size ends here
+//code to process chtml file starts here
+string mimeType;
+mimeType=string("text/html");
+char header[200];
+sprintf(header,"HTTP/1.1 200 OK \r\n Content-Type:%s\r\n Content-Length:%ld\r\n Connection:close\r\n\r\n",mimeType.c_str(),responseSize);
+send(clientSocketDescriptor,header,strlen(header),0);
+long bytesLeftToRead;
+int bytesToRead;
+char buffer[4096];
+bytesLeftToRead=fileLength;
+rewind(vmdFile);
+long tmpBytesLeftToRead;
+long bytesProcessFromFile=0;
+while(1)
+{
+fread(&vmdRecord,sizeof(struct vmd),1,vmdFile);
+if(feof(vmdFile))break;
+tmpBytesLeftToRead=vmdRecord.start_position-bytesProcessFromFile;
+bytesToRead=4096;
+while(tmpBytesLeftToRead>0)
+{
+if(tmpBytesLeftToRead<bytesToRead)bytesToRead=tmpBytesLeftToRead;
+fread(buffer,bytesToRead,1,chtmlFile);
+buffer[bytesToRead]='\0';
+if(feof(chtmlFile))break;//this will not happen
+send(clientSocketDescriptor,buffer,bytesToRead,0);
+bytesProcessFromFile+=bytesToRead;
+tmpBytesLeftToRead-=bytesToRead;
+}//inner loop ends
+fread(buffer,(vmdRecord.end_position-vmdRecord.start_position)+1,1,chtmlFile);
+bytesProcessFromFile+=((vmdRecord.end_position-vmdRecord.start_position)+1);
+
+if(request.contains(vmdRecord.var_name))
+{
+data=request.get(vmdRecord.var_name);
+send(clientSocketDescriptor,data.c_str(),data.length(),0);
+}
+}//outer loop ends
+//vmd file ends but there may be any content is chtmlFile
+//God is ${great}.Ujjain is the city of ${Gods}.I live in Ujjain.
+//here vmd file has 2 record after completion is does not send
+//I live in Ujjain.
+bytesLeftToRead-=bytesProcessFromFile;
+bytesToRead=4096;
+while(bytesLeftToRead>0)
+{
+if(bytesToRead>bytesLeftToRead)bytesToRead=bytesLeftToRead;
+fread(buffer,bytesToRead,1,chtmlFile);
+buffer[bytesToRead]='\0';
+if(feof(chtmlFile))break; //this will never happen
+send(clientSocketDescriptor,buffer,bytesToRead,0);
+bytesLeftToRead-=bytesToRead;
+}
+//code to process chtml file ends here
+fclose(chtmlFile);
+fclose(vmdFile);
 }
 };
 class Bro
@@ -839,7 +924,7 @@ return;
 string resourcePath=this->staticResourcesFolder+string(requestURI);
 if(!FileSystemUtility::fileExists(resourcePath.c_str()))
 {
-//send back 404 
+//send back 404
 return;
 }
 TemplateEngine::processCHTMLFile(resourcePath.c_str(),request,clientSocketDescriptor);
@@ -1144,8 +1229,6 @@ Request request(method,requestURI,httpVersion,dataInRequest);
 while(true)
 {
 Response response;
-
-
 urlMapping.ServiceFunction->doService(request,response);
 if(!request.isToBeForwarded())
 {
@@ -1156,10 +1239,12 @@ string forwardTo=request.forwardToWhichResource();
 urlMappingsIterator=urlMappings.find(forwardTo);
 if(urlMappingsIterator==urlMappings.end())
 {
-if(isCHTML(requestURI))
+//at place of requestURI,forwardTo
+if(isCHTML(forwardTo.c_str()))
 {
-Request request(method,requestURI,httpVersion,dataInRequest);
-processCHTMLResource(clientSocketDescriptor,requestURI,request);
+//Request request(method,requestURI,httpVersion,dataInRequest);
+request.forwardTo(string(""));
+processCHTMLResource(clientSocketDescriptor,forwardTo.c_str(),request);
 }
 else if(!serverStaticResource(clientSocketDescriptor,forwardTo.c_str()))
 {
@@ -1187,7 +1272,7 @@ int main()
 try
 {
 Bro bro;
-bro.setStaticResourcesFolder("c:/bro/whatever");
+bro.setStaticResourcesFolder("c:/bro/gitHub/bro/apps/app1");
 bro.get("/slogan",[](Request &request,Response &response) void{
 string slogan;
 ifstream iFile("data/sofd.data");
@@ -1199,23 +1284,9 @@ if(slogan.length()>0)slogan+=string("<br>");
 slogan+=line;
 }
 iFile.close();
-response.setContentType("text/html");
-const char *html=R""""(
-<!DOCTYPE HTML>
-<html lang='en'>
-<head>
-<meta charset='utf-8'>
-<title>Bro test cases</title>
-<body>
-<h1>Words of wisdom</h1>
-)"""";
-response<<html;
-response<<slogan.c_str();
-const char *html2=R""""(
-</body>
-</html>
-)"""";
-response<<html2;
+cout<<"Slogon of the day: "<<slogan<<endl;
+request.set("sloganOfTheDay",slogan);
+_forward_(request,string("/wordsOfWisdom.chtml"));
 });
 
 
@@ -1282,6 +1353,7 @@ response.setContentType("text/html");
 response<<html;
 cout<<"/coolBro3 function got called"<<endl;
 });
+
 bro.listen(6060,[](Error &error)void{
 if(error.hasError())
 {
