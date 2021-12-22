@@ -34,8 +34,6 @@ virtual string stringify()=0;
 };
 
 
-
-
 class Container
 {
 private:
@@ -349,7 +347,7 @@ string getError()
 return this->error;
 }
 };
-class Request
+class Request:public Container
 {
 private:
 map<string,string>dataMap;
@@ -1405,10 +1403,8 @@ request.setCHTMLVariable("Bulb",&bulb);
 request.setCHTMLVariable("aa",100);
 request.setCHTMLVariable("bb",'a');
 request.setCHTMLVariable("cc",100.88);
-
 _forward_(request,string("/wordsOfWisdom.chtml"));
 });
-
 
 
 bro.addStartupService(3,[](){
@@ -1472,6 +1468,26 @@ const char *html=R""""(
 response.setContentType("text/html");
 response<<html;
 cout<<"/coolBro3 function got called"<<endl;
+});
+
+bro.get("/aRequest",[](Request &request,Response &response)void{
+cout<<"Function against /aRequest got called"<<endl;
+int x=100;
+//100 as a score is generated according to application requirement
+request.set("score",x,NULL,NULL);
+cout<<"Now forwarding request for /bRequest"<<endl;
+_forward_(request,string("/bRequest"));
+});
+bro.get("/bRequest",[](Request &request,Response &response)void{
+cout<<"Function against /bRequest got called"<<endl;
+int whatever;
+request.get("score",&whatever,NULL,NULL);
+cout<<"Fetched data form request object,which was named as score"<<endl;
+response.setContentType("text/html");
+char value[11];
+sprintf(value,"%d",whatever);
+response<<"<html><head></head><body>"<<value;
+response<<"</body></html>";
 });
 
 bro.listen(6060,[](Error &error)void{
