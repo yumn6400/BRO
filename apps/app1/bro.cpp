@@ -24,7 +24,18 @@ request.forwardTo(url); \
 return;
 
 
+
 enum __container_operation_failure_reason__{__KEY_EXISTS__,__KEY_DOES_NOT_EXIST__,__OUT_OF_MEMORY__,__VALUE_SIZE_MISMATCH__};
+
+class Stringifyable
+{
+public:
+virtual string stringify()=0;
+};
+
+
+
+
 class Container
 {
 private:
@@ -347,15 +358,86 @@ const char *requestURI;
 string _forwardTo;
 map<string,string>varMap;
 public:
-void set(string name,string value)
+void setCHTMLVariable(string name,string value)
 {
 varMap.insert({name,value}); //varMap.insert(pair<string,string>(name,value));
 }
-bool contains(string name)
+void setCHTMLVariable(string name,Stringifyable *stringifyable)
+{
+varMap.insert({name,stringifyable->stringify()}); //varMap.insert(pair<string,string>(name,value));
+}
+void setCHTMLVariable(string name,const char *ptr)
+{
+setCHTMLVariable(name,string(ptr));
+}
+void setCHTMLVariable(string name,short int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,unsigned short int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,unsigned int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,unsigned long int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,long long int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,unsigned long long int value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,float value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,double value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,long double value)
+{
+varMap.insert({name,to_string(value)});
+}
+void setCHTMLVariable(string name,char value)
+{
+string str;
+str+=value;
+varMap.insert({name,str});
+}
+void setCHTMLVariable(string name,unsigned char value)
+{
+string str;
+str+=value;
+varMap.insert({name,str});
+}
+void setCHTMLVariable(string name,bool value)
+{
+if(value)varMap.insert({name,string("true")});
+else varMap.insert({name,string("false")});
+}
+
+
+
+
+
+
+bool containsCHTMLVariable(string name)
 {
 return varMap.find(name)!=varMap.end();
 }
-string get(string name)
+string getCHTMLVariable(string name)
 {
 auto i=varMap.find(name);
 if(i==varMap.end())return string("");
@@ -756,8 +838,6 @@ if(!FileSystemUtility::createDirectory("vmd_files"))
 {
 //we will implement this part later on
 //the code to calculate response size starts here
-
-
 //the code to calculate response size ends here
 }
 }
@@ -796,7 +876,7 @@ while(1)
 fread(&vmdRecord,sizeof(struct vmd),1,vmdFile);
 if(feof(vmdFile))break;
 responseSize=(responseSize-(vmdRecord.end_position-vmdRecord.start_position)+1);
-data=request.get(vmdRecord.var_name);
+data=request.getCHTMLVariable(vmdRecord.var_name);
 responseSize=responseSize+data.length();
 }
 //code to calculate response size ends here
@@ -804,7 +884,7 @@ responseSize=responseSize+data.length();
 string mimeType;
 mimeType=string("text/html");
 char header[200];
-sprintf(header,"HTTP/1.1 200 OK \r\n Content-Type:%s\r\n Content-Length:%ld\r\n Connection:close\r\n\r\n",mimeType.c_str(),responseSize);
+sprintf(header,"HTTP/1.1 200 OK\r\n Content-Type:%s\r\n Content-Length:%ld\r\n Connection:close\r\n\r\n",mimeType.c_str(),responseSize);
 send(clientSocketDescriptor,header,strlen(header),0);
 long bytesLeftToRead;
 int bytesToRead;
@@ -823,39 +903,41 @@ while(tmpBytesLeftToRead>0)
 {
 if(tmpBytesLeftToRead<bytesToRead)bytesToRead=tmpBytesLeftToRead;
 fread(buffer,bytesToRead,1,chtmlFile);
-buffer[bytesToRead]='\0';
 if(feof(chtmlFile))break;//this will not happen
+//send(clientSocketDescriptor,buffer,bytesToRead,0);
 send(clientSocketDescriptor,buffer,bytesToRead,0);
 bytesProcessFromFile+=bytesToRead;
 tmpBytesLeftToRead-=bytesToRead;
 }//inner loop ends
 fread(buffer,(vmdRecord.end_position-vmdRecord.start_position)+1,1,chtmlFile);
 bytesProcessFromFile+=((vmdRecord.end_position-vmdRecord.start_position)+1);
-
-if(request.contains(vmdRecord.var_name))
+if(request.containsCHTMLVariable(vmdRecord.var_name))
 {
-data=request.get(vmdRecord.var_name);
+data=request.getCHTMLVariable(vmdRecord.var_name);
 send(clientSocketDescriptor,data.c_str(),data.length(),0);
 }
 }//outer loop ends
+
 //vmd file ends but there may be any content is chtmlFile
 //God is ${great}.Ujjain is the city of ${Gods}.I live in Ujjain.
 //here vmd file has 2 record after completion is does not send
 //I live in Ujjain.
+
 bytesLeftToRead-=bytesProcessFromFile;
 bytesToRead=4096;
 while(bytesLeftToRead>0)
 {
-if(bytesToRead>bytesLeftToRead)bytesToRead=bytesLeftToRead;
+if(bytesLeftToRead<bytesToRead)bytesToRead=bytesLeftToRead;
 fread(buffer,bytesToRead,1,chtmlFile);
-buffer[bytesToRead]='\0';
 if(feof(chtmlFile))break; //this will never happen
 send(clientSocketDescriptor,buffer,bytesToRead,0);
-bytesLeftToRead-=bytesToRead;
+bytesLeftToRead=bytesLeftToRead-bytesToRead;
 }
+
 //code to process chtml file ends here
 fclose(chtmlFile);
 fclose(vmdFile);
+//close(clientSocketDescriptor);
 }
 };
 class Bro
@@ -1267,12 +1349,41 @@ WSACleanup();
 #endif
 }
 };
+
+//Bobby[the web application developer]
+class Bulb:public Stringifyable
+{
+private:
+int wattage;
+int price;
+public:
+void setWattage(int wattage)
+{
+this->wattage=wattage;
+}
+int getWattage()
+{
+return this->wattage;
+}
+void setPrice(int price)
+{
+this->price=price;
+}
+int getPrice()
+{
+return this->price;
+}
+string stringify()
+{
+return string("Wattage is: ")+to_string(this->wattage)+string(", Price is: ")+to_string(this->price);
+}
+};
 int main()
 {
 try
 {
 Bro bro;
-bro.setStaticResourcesFolder("c:/bro/gitHub/bro/apps/app1");
+bro.setStaticResourcesFolder("c:/bro/whatever");
 bro.get("/slogan",[](Request &request,Response &response) void{
 string slogan;
 ifstream iFile("data/sofd.data");
@@ -1285,7 +1396,16 @@ slogan+=line;
 }
 iFile.close();
 cout<<"Slogon of the day: "<<slogan<<endl;
-request.set("sloganOfTheDay",slogan);
+request.setCHTMLVariable("sloganOfTheDay",slogan);
+request.setCHTMLVariable("abcd","Hello");
+Bulb bulb;
+bulb.setWattage(60);
+bulb.setPrice(100);
+request.setCHTMLVariable("Bulb",&bulb);
+request.setCHTMLVariable("aa",100);
+request.setCHTMLVariable("bb",'a');
+request.setCHTMLVariable("cc",100.88);
+
 _forward_(request,string("/wordsOfWisdom.chtml"));
 });
 
