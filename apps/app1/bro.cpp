@@ -8,6 +8,7 @@
 #include<sys/stat.h>
 #include<string.h>
 #include<unistd.h>
+#include<set>
 #ifdef _WIN32
 #include<windows.h>
 const char *PATH_SEPARATOR="\\";
@@ -19,6 +20,7 @@ const char *PATH_SEPARATOR="/";
 #endif
 using namespace std;
 //Amit (The Bro Programmer)
+
 #define _forward_(request,url) \
 request.forwardTo(url); \
 return;
@@ -33,6 +35,104 @@ public:
 virtual string stringify()=0;
 };
 
+class GMTDateTime
+{
+private:
+struct tm gmtDateTime;
+bool isValid;
+public:
+GMTDateTime() //to pick sys date time
+{
+time_t elapsedSeconds;
+elapsedSeconds=time(NULL);//return number of seconds elapsed since 1 jan 1970
+if(elapsedSeconds==-1)
+{
+this->isValid=false;
+this->gmtDateTime.tm_mday=0;
+this->gmtDateTime.tm_mon=0;
+this->gmtDateTime.tm_year=0;
+this->gmtDateTime.tm_hour=0;
+this->gmtDateTime.tm_min=0;
+this->gmtDateTime.tm_sec=0;
+return;
+}
+struct tm *gmt=gmtime(&elapsedSeconds);
+this->gmtDateTime=*gmt;
+this->isValid=true;
+}
+//month(0-11)
+//year(actual year-1900)
+GMTDateTime(int day,int month,int year,int hour,int minute,int second)
+{
+struct tm tmptm;
+tmptm.tm_mday=day;
+tmptm.tm_mon=month;
+tmptm.tm_year=year;
+tmptm.tm_hour=hour;
+tmptm.tm_min=minute;
+tmptm.tm_sec=second;
+if(mktime(&tmptm)==-1)//mktime will set wday part in structure
+{
+this->isValid=false;
+this->gmtDateTime.tm_mday=0;
+this->gmtDateTime.tm_mon=0;
+this->gmtDateTime.tm_year=0;
+this->gmtDateTime.tm_hour=0;
+this->gmtDateTime.tm_min=0;
+this->gmtDateTime.tm_sec=0;
+return;
+}
+this->isValid=true;
+this->gmtDateTime=tmptm;
+}
+int getDay()
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_mday;
+}
+int getMonth() //return in form of 1 to 12
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_mon+1;
+}
+int getYear() //return actual year
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_year+1900;
+}
+int getHour()
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_hour;
+}
+int getMinute()
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_min;
+}
+int getSecond()
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_sec;
+}
+int getWeekDay() //return sun to sat in form of 0 to 6
+{
+if(!(this->isValid))return -1;
+return this->gmtDateTime.tm_wday;
+}
+string stringify()
+{
+if(!this->isValid)return string("");
+char buffer[80];
+strftime(buffer,80,"%a,%d %b %Y %H:%M:%S GMT",&(this->gmtDateTime));
+return string(buffer);
+}
+};
+ostream & operator<<(ostream &out, GMTDateTime &gmtDateTime)
+{
+out<<gmtDateTime.stringify();
+return out;
+}
 
 class Container
 {
@@ -229,7 +329,12 @@ FileSystemUtility(){}
 public:
 static bool createDirectory(const char *directoryName)
 {
+#ifdef _WIN32
 return (mkdir(directoryName)==0);
+#endif
+#ifdef linux
+return (mkdir(directoryName,S_IRWXU)==0);
+#endif
 }
 static unsigned int getLastUpdatedTime(const char *fileName)
 {
@@ -347,10 +452,158 @@ string getError()
 return this->error;
 }
 };
+
+typedef enum _cookie_same_site_flag
+{
+COOKIE_SAME_SITE_FLAG_NONE,
+COOKIE_SAME_SITE_FLAG_VAX,
+COOKIE_SAME_SITE_FLAG_STRICT
+}COOKIE_SAME_SITE_FLAG;
+
+class Cookie
+{
+private:
+string name;
+string value;
+string expiresOn;
+long maxAge;
+string domain;
+string path;
+bool isSecure;
+bool isHttpOnly;
+COOKIE_SAME_SITE_FLAG sameSiteFlag;
+public:
+Cookie(string name,string value)
+{
+this->name=name;
+this->value=value;
+this->expiresOn="";
+this->maxAge=-1;
+this->domain="";
+this->path="";
+this->isSecure=false;
+this->isHttpOnly=false;
+}
+string getName()
+{
+return this->name;
+}
+string getValue()
+{
+return this->value;
+}
+void setExpiresOn(GMTDateTime &gmtDateTime)
+{
+this->expiresOn=gmtDateTime.stringify();
+}
+string getExpiresOn()
+{
+return this->expiresOn;
+}
+void setMaxAgeInSeconds(int maxAgeInSeconds)
+{
+this->maxAge=maxAgeInSeconds;
+}
+void setMaxAgeInMinutes(int maxAgeInMinutes)
+{
+this->maxAge=maxAgeInMinutes*60;
+}
+void setMaxAgeInHours(int maxAgeInHours)
+{
+this->maxAge=maxAgeInHours*60*60;
+}
+int getMaxAge()
+{
+return this->maxAge;
+}
+void setDomain(string domain)
+{
+this->domain=domain;
+}
+string getDomain()
+{
+return this->domain;
+}
+void setPath(string path)
+{
+this->path=path;
+}
+string getPath()
+{
+return this->path;
+}
+void setSecure(bool isSecure)
+{
+this->isSecure=isSecure;
+}
+bool getSecure()
+{
+return this->isSecure;
+}
+void setHttpOnly(bool isHttpOnly)
+{
+this->isHttpOnly=isHttpOnly;
+}
+bool getHttpOnly()
+{
+return this->isHttpOnly;
+}
+string stringify()
+{
+//write the necessary code to generate a string or
+/*  
+Note: 
+if same site part is assigned None then secure needs to be added
+Think about the __secure- or __Host- prefixed name part
+*/
+return "";//you will have to change this
+}
+};
+
+class HeaderUtility
+{
+private:
+HeaderUtility(){}
+public:
+static void parseHeader(const char *header,map<string,string> &headerFieldsMap)
+{
+const char *sp,*ep,*ptr,*colonPtr;
+ptr=header;
+while(*ptr)
+{
+sp=ptr;
+colonPtr=NULL;
+while(*ptr && *ptr!='\r' && *ptr!='\n')
+{
+if(colonPtr==NULL && *ptr==':')colonPtr=ptr;
+ptr++;
+}
+ep=ptr-1;
+if(*ptr== '\r')ptr+=2;
+else ptr+=1;
+if(sp==ptr || colonPtr==NULL) //really,this will never happen
+{
+ptr++;
+continue;
+}
+string fieldName(sp,colonPtr-sp);
+if(*(colonPtr+1)==' ')sp=colonPtr+2;
+else sp=colonPtr+1;
+string fieldValue(sp,ep-sp+1);
+transform(fieldName.begin(),fieldName.end(),fieldName.begin(),::tolower);
+cout<<"["<<fieldName<<"],["<<fieldValue<<"]"<<endl;
+headerFieldsMap.insert({fieldName,fieldValue});
+if(*ptr=='\r' && *(ptr+1)=='\n')break; //headers ends
+}
+}
+};
+
+
 class Request:public Container
 {
 private:
 map<string,string>dataMap;
+map<string,string> &headerFieldsMap;
 char *method,*httpVersion;
 const char *requestURI;
 string _forwardTo;
@@ -425,12 +678,6 @@ void setCHTMLVariable(string name,bool value)
 if(value)varMap.insert({name,string("true")});
 else varMap.insert({name,string("false")});
 }
-
-
-
-
-
-
 bool containsCHTMLVariable(string name)
 {
 return varMap.find(name)!=varMap.end();
@@ -454,7 +701,7 @@ string forwardToWhichResource()
 {
 return this->_forwardTo;
 }
-Request(char *method,const char *requestURI,char *httpVersion,char *dataInRequest)
+Request(char *method,const char *requestURI,char *httpVersion,char *dataInRequest,map<string,string> &headerFieldsMap):headerFieldsMap(headerFieldsMap)
 {
 this->method=method;
 this->requestURI=requestURI;
@@ -512,6 +759,88 @@ auto iterator=dataMap.find(key);
 if(iterator==dataMap.end())return string("");
 return iterator->second;
 }
+public:
+string getCookieValue(string name)
+{
+auto f=headerFieldsMap.find("cookie");
+if(f==headerFieldsMap.end())return string("");
+string cookieString=f->second;
+const char *ptr,*nsp,*nep,*vsp,*vep;
+ptr=cookieString.c_str();
+while(*ptr)
+{
+if(*ptr==' ')ptr++;
+if(*ptr=='\0')break;
+nsp=ptr;
+nep=ptr;
+while(*nep && *nep!='=')nep++;
+if(*nep=='\0')break; //this will never happen
+vsp=nep+1;
+vep=vsp;
+while(*vep && *vep!=';')vep++;
+nep--; // because nep is pointing to the block that contains =
+vep--; //because vep is pointing to the block that contains ;
+string cookieName(nsp,nep-nsp+1);
+if(cookieName==name)return string(vsp,vep-vsp+1);
+ptr=vep+2;
+}
+return string("");
+}
+void getCookies(list<Cookie> &cookies)
+{
+auto f=headerFieldsMap.find("cookie");
+if(f==headerFieldsMap.end())return;
+string cookieString=f->second;
+const char *ptr,*nsp,*nep,*vsp,*vep;
+ptr=cookieString.c_str();
+while(*ptr)
+{
+if(*ptr==' ')ptr++;
+if(*ptr=='\0')break;
+nsp=ptr;
+nep=ptr;
+while(*nep && *nep!='=')nep++;
+if(*nep=='\0')break; //this will never happen
+vsp=nep+1;
+vep=vsp;
+while(*vep && *vep!=';')vep++;
+nep--; // because nep is pointing to the block that contains =
+vep--; //because vep is pointing to the block that contains ;
+string cookieName(nsp,nep-nsp+1);
+string cookieValue(vsp,vep-vsp+1);
+Cookie cookie(cookieName,cookieValue);
+cookies.push_back(cookie);
+ptr=vep+2;
+}
+}
+void getCookieNames(list<string> &cookieNames)
+{
+auto f=headerFieldsMap.find("cookie");
+if(f==headerFieldsMap.end())return;
+string cookieString=f->second;
+const char *ptr,*nsp,*nep,*vsp,*vep;
+ptr=cookieString.c_str();
+while(*ptr)
+{
+if(*ptr==' ')ptr++;
+if(*ptr=='\0')break;
+nsp=ptr;
+nep=ptr;
+while(*nep && *nep!='=')nep++;
+if(*nep=='\0')break; //this will never happen
+vsp=nep+1;
+vep=vsp;
+while(*vep && *vep!=';')vep++;
+nep--; // because nep is pointing to the block that contains =
+vep--; //because vep is pointing to the block that contains ;
+string cookieName(nsp,nep-nsp+1);
+cookieNames.push_back(cookieName);
+ptr=vep+2;
+}
+}
+
+
+
 friend class Bro;
 };
 class Response
@@ -521,11 +850,14 @@ string contentType;
 forward_list<string> content;
 forward_list<string>::iterator contentIterator;
 unsigned long contentLength;
+set<string> cookies;
+int cookiesDataLength;
 public:
 Response()
 {
 this->contentLength=0;
 this->contentIterator=this->content.before_begin();
+this->cookiesDataLength=0;
 }
 ~Response()
 {
@@ -538,6 +870,25 @@ if(Validator::isValidMIMEType(contentType))
 this->contentType=contentType;
 }
 }
+void addCookie(Cookie &cookie)
+{
+string name=cookie.getName();
+if(name.length()==0)return;
+string value=cookie.getValue();
+if(value.length()==0)return;
+string cookieString=name+string("=")+value;
+if(cookies.find(cookieString)!=cookies.end())return;
+this->cookiesDataLength+=cookieString.length();
+this->cookiesDataLength+=12;// "Set-Cookie: "
+this->cookiesDataLength+=1; // "\n"
+this->cookies.insert(cookieString);
+}
+Response & operator<<(Cookie &cookie)
+{
+this->addCookie(cookie);
+return *this;
+}
+
 Response & operator<<(string content)
 {
 this->contentLength+=content.length();
@@ -553,10 +904,19 @@ HttpResponseUtility(){}
 public:
 static void sendResponse(int clientSocketDescriptor,Response &response)
 {
-char header[200];
+//char header[200];
+char *header=new char[200+response.cookiesDataLength];
 int contentLength=response.contentLength;
-sprintf(header,"HTTP/1.1 200 OK \r\n Content-Type:text/html\r\n Content-Length:%d\r\n Connection:close\r\n\r\n",contentLength);
+sprintf(header,"HTTP/1.1 200 OK \r\n Content-Type:text/html\r\n Content-Length:%d\r\n",contentLength);
+for(string cookieString:response.cookies)
+{
+strcat(header,"Set-Cookie: ");
+strcat(header,cookieString.c_str());
+strcat(header,"\n");
+}
+strcat(header,"Connection: close\r\n\r\n");
 send(clientSocketDescriptor,header,strlen(header),0);
+header[strlen(header)]='\0';
 auto contentIterator=response.content.begin();
 while(contentIterator!=response.content.end())
 {
@@ -564,8 +924,8 @@ string str=*contentIterator;
 send(clientSocketDescriptor,str.c_str(),str.length(),0);
 ++contentIterator;
 }
+delete []header;
 }
-
 };
 
 
@@ -1192,6 +1552,7 @@ continue;
 int i;
 char *method,*requestURI,*httpVersion,*dataInRequest;
 requestBuffer[requestLength]='\0';
+cout<<requestBuffer<<endl;
 //code to parse the first line of the http request starts here
 // GET \ HTTP 1.1\r\n
 // GET \pqr.html HTTP 1.1\r\n
@@ -1243,7 +1604,10 @@ close(clientSocketDescriptor);
 continue;
 }
 httpVersion=requestBuffer+i;
-while(requestBuffer[i]&&requestBuffer[i]!='\r'&&requestBuffer[i]!='\n')i++;
+while(requestBuffer[i]&&requestBuffer[i]!='\r'&&requestBuffer[i]!='\n')
+{
+i++;
+}
 if(requestBuffer[i]=='\0')
 {
 HttpErrorStatusUtility::sendBadRequestError(clientSocketDescriptor);
@@ -1273,6 +1637,7 @@ HttpErrorStatusUtility::sendHttpVersionNotSupportedError(clientSocketDescriptor,
 close(clientSocketDescriptor);
 continue;
 }
+int headerStartIndex=i;
 dataInRequest=NULL;
 i=0;
 while(requestURI[i]!='\0'&&requestURI[i]!='?')i++;
@@ -1286,7 +1651,9 @@ if(urlMappingsIterator==urlMappings.end())
 {
 if(isCHTML(requestURI))
 {
-Request request(method,requestURI,httpVersion,dataInRequest);
+map<string,string> headerFieldsMap;
+HeaderUtility::parseHeader(requestBuffer+headerStartIndex,headerFieldsMap);
+Request request(method,requestURI,httpVersion,dataInRequest,headerFieldsMap);
 processCHTMLResource(clientSocketDescriptor,requestURI,request);
 }
 else if(!serverStaticResource(clientSocketDescriptor,requestURI))
@@ -1304,8 +1671,12 @@ close(clientSocketDescriptor);
 continue;
 }
 //code to parse the header and then the payload if exist starts here
+
+map<string,string> headerFieldsMap;
+HeaderUtility::parseHeader(requestBuffer+headerStartIndex,headerFieldsMap);
+
 //code to parset the header and then the payload if exist ends here
-Request request(method,requestURI,httpVersion,dataInRequest);
+Request request(method,requestURI,httpVersion,dataInRequest,headerFieldsMap);
 while(true)
 {
 Response response;
@@ -1340,7 +1711,7 @@ break;
 }
 request.forwardTo(string(""));
 }//loop ends
-closesocket(clientSocketDescriptor);
+closesocket(clientSocketDescriptor);//done done
 }//infinite loop ends here    
 #ifdef _WIN32
 WSACleanup();
@@ -1467,6 +1838,26 @@ const char *html=R""""(
 )"""";
 response.setContentType("text/html");
 response<<html;
+cout<<request.getCookieValue("RollNumber")<<endl;
+cout<<request.getCookieValue("Name")<<endl;
+cout<<request.getCookieValue("Gender")<<endl;
+list<string> l1;
+request.getCookieNames(l1);
+list<Cookie> l2;
+request.getCookies(l2);
+cout<<"***************"<<endl;
+for(string s:l1)
+{
+cout<<s<<endl;
+}
+cout<<"***************"<<endl;
+for(Cookie c:l2)
+{
+cout<<c.getName()<<","<<c.getValue()<<endl;
+}
+
+
+
 cout<<"/coolBro3 function got called"<<endl;
 });
 
@@ -1484,10 +1875,12 @@ int whatever;
 request.get("score",&whatever,NULL,NULL);
 cout<<"Fetched data form request object,which was named as score"<<endl;
 response.setContentType("text/html");
-char value[11];
-sprintf(value,"%d",whatever);
-response<<"<html><head></head><body>"<<value;
-response<<"</body></html>";
+Cookie cookie("Name","Rahul");
+Cookie cookie1("RollNumber","101");
+Cookie cookie2("Gender","Male");
+response<<cookie<<cookie1<<cookie2;
+response<<"<html><head></head><body>";
+response<<"<br><a href=\"/coolBro1\">coolBro1</a></body></html>";
 });
 
 bro.listen(6060,[](Error &error)void{

@@ -1,0 +1,14 @@
+<!DOCTYPE HTML>
+<html lang='en'>
+<head>
+<meta charset='utf-8'> 
+<title>Words of wisdom</title>
+</head>
+<body>
+<h1>${sloganOfTheDay}</h1>
+<h2>${Bulb}</h2>
+<h3>${aa}</h3>
+<h3>${bb}</h3>
+<h3>${cc}</h3>
+</body>
+</html>
